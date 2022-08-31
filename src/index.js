@@ -1,3 +1,4 @@
+const { response } = require("express");
 const express = require("express");
 const { v4: uuidv4 } = require("uuid");
 const app = express();
@@ -11,6 +12,17 @@ function verifyIfExistsAccountCPF(req, res, next) {
   }
   req.customer = customer;
   return next();
+}
+
+function getBalance(statement){
+  const balance = statement.reduce((acc, operation)=>{
+    if(operation.type === 'credit'){
+      return acc + operation.amount;
+    } else{
+      return acc - operation.amount;
+    }
+  }, 0);
+  return balance;
 }
 
 app.use(express.json());
@@ -33,7 +45,7 @@ app.post("/account", (req, res) => {
 });
 
 app.get("/statement", verifyIfExistsAccountCPF, (req, res) => {
-  const { customer } = req;
+ const {customer} = req;
   return res.json(customer.statement);
 });
 
@@ -50,4 +62,32 @@ app.post("/deposit", verifyIfExistsAccountCPF, (req, res) => {
   return res.status(201).send();
 });
 
+app.post("/withdrawn", verifyIfExistsAccountCPF, (req, res) =>{
+const {amount} = req.body;
+const {customer} = req;
+const balance = getBalance(customer.statement);
+
+if(balance < amount) {
+  return res.status(400).json({error: 'Insufficient funds!'});
+}
+const statementOperation = {
+  amount,
+  created_at: new Date(),
+  type: "debit",
+}
+customer.statement.push(statementOperation);
+return response.status(201).send();
+});
+
+app.get("/statement/date", verifyIfExistsAccountCPF, (req, res) => {
+  const {customer} = req;
+  const {date} = req.params;
+  const dateFormat = new Date(date + " 00:00");
+  const statement = customer.statement.filter((statement)=> statement.created_at.toDateString() === new Date(dateFormat).toDateString());
+   return res.json(statement);
+ });
+ 
+
 app.listen(3333);
+
+
